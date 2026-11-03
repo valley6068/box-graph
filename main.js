@@ -18,7 +18,7 @@ const ICON = `<rect x="6" y="6" width="88" height="88" rx="14" fill="none" strok
 
 function buildTree(files) {
   const root = { name: "Vault", kids: [], notes: [], count: 0 };
-  const byPath = { "": root };
+  const byPath = Object.assign(Object.create(null), { "": root }); // no built-in keys: a folder named "constructor" must not match one
   for (const f of files) {
     let folder = "", node = root;
     for (const part of f.folder ? f.folder.split("/") : []) {
@@ -151,7 +151,7 @@ if (obsidian) {
 
     countLinks() {
       const links = this.app.metadataCache.resolvedLinks;
-      this.incoming = {};
+      this.incoming = Object.create(null); // no built-in keys, same reason as in buildTree
       for (const from in links) for (const to in links[from]) this.incoming[to] = (this.incoming[to] || 0) + 1;
     }
 

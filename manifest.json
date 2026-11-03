@@ -1,7 +1,7 @@
 {
   "id": "box-graph",
   "name": "Box Graph",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.4.0",
   "description": "Show your vault as squares: each folder is a square, each note a dot. Hover a dot to preview the note, click a square to go inside.",
   "author": "valley6068",
