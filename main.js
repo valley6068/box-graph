@@ -117,6 +117,7 @@ if (obsidian) {
     getViewType() { return VIEW; }
     getDisplayText() { return "Box Graph"; }
     getIcon() { return VIEW; }
+    constructor(leaf, plugin) { super(leaf); this.plugin = plugin; }
 
     async onOpen() {
       const root = this.containerEl.children[1];
@@ -130,6 +131,7 @@ if (obsidian) {
       this.tip = root.createDiv({ attr: { style: "position:absolute;z-index:3;display:none;max-width:320px;padding:8px 10px;border-radius:8px;pointer-events:none;font-size:12px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);box-shadow:0 4px 16px rgba(0,0,0,.3);" } });
       this.ctx = this.canvas.getContext("2d", { alpha: false }); // opaque canvas = sharper (LCD) text
       this.rebuild();
+      this.reopen(this.plugin.data.path); // back into the box you were in last time
       this.registerEvents();
       this.ro = new ResizeObserver(() => this.resize());
       this.ro.observe(root);
@@ -138,6 +140,7 @@ if (obsidian) {
     async onClose() { // stop everything that would keep running after the tab is closed
       this.ro.disconnect();
       clearTimeout(this.tipTimer); clearTimeout(this.rebuildTimer); clearTimeout(this.linkTimer);
+      if (this.saveTimer) { clearTimeout(this.saveTimer); this.plugin.saveData(this.plugin.data); }
     }
 
     rebuild() {
@@ -198,20 +201,40 @@ if (obsidian) {
         const b = this.crumbs.createEl("button", { text: n === this.tree ? `Vault (${n.count})` : `${n.name} (${n.count})` });
         b.onclick = () => this.enter(n);
       }
-      this.fit();
+      this.remember(false);
+      this.place();
+    }
+
+    key() { return this.stack.map((n) => n.name).join("/"); }
+
+    // zoom + position per box, kept as the world point in the middle of the panel so a resize doesn't shift it
+    place() {
+      const v = this.plugin.data.views[this.key()], c = this.canvas;
+      if (!v || !c.clientWidth) return this.fit();
+      this.scale = v.s; this.ox = c.clientWidth / 2 - v.cx * v.s; this.oy = c.clientHeight / 2 - v.cy * v.s;
+      this.draw();
+    }
+
+    remember(view = true) { // view=false: only the box you are in
+      const d = this.plugin.data, c = this.canvas;
+      d.path = this.stack.map((n) => n.name);
+      if (view) d.views[this.key()] = { s: this.scale, cx: (c.clientWidth / 2 - this.ox) / this.scale, cy: (c.clientHeight / 2 - this.oy) / this.scale };
+      clearTimeout(this.saveTimer);
+      this.saveTimer = setTimeout(() => { this.saveTimer = null; this.plugin.saveData(d); }, 500);
     }
 
     fit() {
       const r = this.canvas.getBoundingClientRect();
       if (!r.width || !this.items.length) return;
       const w = Math.max(...this.items.map((it) => it.x + it.w)), h = Math.max(...this.items.map((it) => it.y + it.h));
-      this.scale = Math.min((r.width - 40) / w, (r.height - 70) / h, 3);
+      const top = 8 + this.search.offsetTop + this.search.offsetHeight + 24, side = 60; // keep clear of the breadcrumb + search bar
+      this.scale = Math.min((r.width - 2 * side) / w, (r.height - top - side) / h, 3);
       this.ox = (r.width - w * this.scale) / 2;
-      this.oy = 50 + (r.height - 50 - h * this.scale) / 2;
+      this.oy = top + (r.height - top - side - h * this.scale) / 2;
       this.draw();
     }
 
-    resize() { this.fit(); }
+    resize() { this.place(); }
 
     // canvas pixels must match screen pixels exactly, or the browser stretches it and everything blurs.
     // Checked on every draw because Obsidian zoom / Windows scaling / another monitor change the ratio without a resize.
@@ -319,7 +342,7 @@ if (obsidian) {
           const body = (await this.app.vault.cachedRead(note.file).catch(() => "")).replace(/^---[\s\S]*?---\s*/, ""); // "" if the note was just deleted
           if (this.hover && this.hover.note === note) prev.setText(body.slice(0, 220) + (body.length > 220 ? "…" : ""));
         }, 200);
-        t.createDiv({ text: "click to open note", attr: { style: "color:var(--text-faint);margin-top:4px;" } });
+        t.createDiv({ text: h.item.kind === "box" ? "click to go into box · Shift+click to open this note" : "click to open note", attr: { style: "color:var(--text-faint);margin-top:4px;" } });
       } else {
         t.createEl("b", { text: h.item.node.name });
         t.createDiv({ text: `${h.item.notes.length} notes · ${h.item.node.kids.length} boxes inside · click to open` });
@@ -344,11 +367,12 @@ if (obsidian) {
         if (!drag) return;
         c.style.cursor = "grab";
         const wasClick = !drag.moved && e.target === c;
+        if (drag.moved) this.remember();
         drag = null;
         if (!wasClick) return;
         const [wx, wy] = this.world(e), h = hit(this.items, wx, wy);
         if (!h) return;
-        if (h.note && (h.item.kind === "notes" || e.ctrlKey || e.metaKey)) this.app.workspace.openLinkText(h.note.path, "", true);
+        if (h.note && (h.item.kind === "notes" || e.shiftKey || e.ctrlKey || e.metaKey)) this.app.workspace.openLinkText(h.note.path, "", true);
         else if (h.item.kind === "box") { this.hover = null; this.showTip(null); this.enter(h.item.node); }
       });
       this.registerDomEvent(c, "mousemove", (e) => {
@@ -365,10 +389,11 @@ if (obsidian) {
       this.registerDomEvent(c, "mouseleave", () => { this.hover = null; this.showTip(null); this.draw(); });
       this.registerDomEvent(c, "wheel", (e) => {
         e.preventDefault();
-        const [wx, wy, sx, sy] = this.world(e), k = Math.exp(-e.deltaY * 0.0015);
+        const [wx, wy, sx, sy] = this.world(e), k = Math.exp(-e.deltaY * 0.0007);
         this.scale *= k; this.ox = sx - wx * this.scale; this.oy = sy - wy * this.scale;
-        this.draw();
+        this.draw(); this.remember();
       }, { passive: false });
+      this.registerDomEvent(c, "dblclick", (e) => { const [wx, wy] = this.world(e); if (hit(this.items, wx, wy)) return; delete this.plugin.data.views[this.key()]; this.remember(false); this.fit(); }); // back to the whole box
       const later = () => { clearTimeout(this.rebuildTimer); this.rebuildTimer = setTimeout(() => { const path = this.stack.map((n) => n.name); this.rebuild(); this.reopen(path); }, 1500); };
       this.registerEvent(this.app.vault.on("create", later));
       this.registerEvent(this.app.vault.on("delete", later));
@@ -386,8 +411,9 @@ if (obsidian) {
 
   class BoxGraphPlugin extends obsidian.Plugin {
     async onload() {
+      this.data = Object.assign({ path: [], views: {} }, await this.loadData()); // last box + zoom/position per box
       obsidian.addIcon(VIEW, ICON);
-      this.registerView(VIEW, (leaf) => new BoxGraphView(leaf));
+      this.registerView(VIEW, (leaf) => new BoxGraphView(leaf, this));
       this.addRibbonIcon(VIEW, "Open Box Graph", () => this.open());
       this.addCommand({ id: "open", name: "Open", callback: () => this.open() }); // Obsidian shows it as "Box Graph: Open"
     }
