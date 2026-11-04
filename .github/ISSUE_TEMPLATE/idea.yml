@@ -1,0 +1,11 @@
+name: Idea
+description: Something you'd like Box Graph to do.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: What are you trying to do, and what gets in the way right now?
+    validations:
+      required: true

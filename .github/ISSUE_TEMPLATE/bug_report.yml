@@ -1,0 +1,31 @@
+name: Something is broken
+description: Box Graph does something wrong, or doesn't work at all.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, and what went wrong? A screenshot helps a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+  - type: input
+    id: version
+    attributes:
+      label: Box Graph version
+      description: Settings → Community plugins, it's next to the name.
+      placeholder: "1.0.2"
+  - type: input
+    id: device
+    attributes:
+      label: Computer or phone
+      placeholder: "Windows 11, Obsidian 1.8"
+  - type: input
+    id: size
+    attributes:
+      label: Roughly how many notes are in your vault?
+      placeholder: "about 2000"
