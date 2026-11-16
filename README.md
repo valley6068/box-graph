@@ -42,6 +42,10 @@ Open it with the box icon in the left sidebar, or the command **Box Graph: Open*
 - A note's text is only read when you rest the mouse on it.
 - On phones, tapping works, but pinch-to-zoom doesn't yet.
 
+## Found a bug or have an idea?
+
+Please tell me! [Open an issue here](https://github.com/valley6068/box-graph/issues/new/choose) and pick **Something is broken** or **Idea**. It only takes a minute, and a screenshot helps a lot. I read every one.
+
 ## License
 
 MIT
